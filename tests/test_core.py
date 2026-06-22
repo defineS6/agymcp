@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -10,6 +11,8 @@ from agymcp.core import (
     build_agy_print_args,
     build_command_preview,
     find_conversation_id,
+    find_conversation_id_from_file,
+    recover_latest_agent_message,
     redact_text,
     run_process,
 )
@@ -56,6 +59,14 @@ def test_build_agy_print_args_resolves_add_dirs_from_base_dir(tmp_path: Path) ->
     assert args[-3:] == [str(extra.resolve()), "--print", "hello"]
 
 
+def test_build_agy_print_args_accepts_log_file(tmp_path: Path) -> None:
+    log_file = tmp_path / "agy.log"
+
+    args = build_agy_print_args("hello", log_file=log_file)
+
+    assert args == ["--print-timeout", "300s", "--log-file", str(log_file), "--print", "hello"]
+
+
 def test_command_preview_hides_prompt() -> None:
     preview = build_command_preview(["agy", "--model", "x", "--print", "secret prompt"])
 
@@ -64,6 +75,13 @@ def test_command_preview_hides_prompt() -> None:
 
 def test_find_conversation_id() -> None:
     assert find_conversation_id("Conversation ID: abcdef12-3456") == "abcdef12-3456"
+
+
+def test_find_conversation_id_from_file(tmp_path: Path) -> None:
+    log_file = tmp_path / "agy.log"
+    log_file.write_text("I server.go:789] Created conversation abcdef12-3456", encoding="utf-8")
+
+    assert find_conversation_id_from_file(log_file) == "abcdef12-3456"
 
 
 def test_redact_text_masks_common_sensitive_values() -> None:
@@ -85,3 +103,31 @@ def test_run_process_success() -> None:
 
     assert result.success
     assert result.stdout.strip() == "ok"
+
+
+def test_recover_latest_agent_message_from_transcript(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    app_data = tmp_path / "appdata"
+    cwd = tmp_path / "workspace"
+    conversation_id = "conversation-123456"
+    transcript_dir = app_data / "brain" / conversation_id / ".system_generated" / "logs"
+    cache_dir = app_data / "cache"
+    cwd.mkdir()
+    transcript_dir.mkdir(parents=True)
+    cache_dir.mkdir(parents=True)
+    monkeypatch.setenv("AGY_APP_DATA_DIR", str(app_data))
+
+    (cache_dir / "last_conversations.json").write_text(json.dumps({str(cwd): conversation_id}), encoding="utf-8")
+    (transcript_dir / "transcript.jsonl").write_text(
+        "\n".join(
+            [
+                '{"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","content":"hello"}',
+                '{"source":"MODEL","type":"PLANNER_RESPONSE","status":"DONE","content":"ok"}',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    recovered_session_id, message = recover_latest_agent_message(cwd=cwd)
+
+    assert recovered_session_id == conversation_id
+    assert message == "ok"

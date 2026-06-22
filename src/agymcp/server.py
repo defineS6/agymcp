@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import tempfile
+import uuid
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -16,7 +18,9 @@ from agymcp.core import (
     build_agy_print_args,
     build_doctor_report,
     find_conversation_id,
+    find_conversation_id_from_file,
     redact_text,
+    recover_latest_agent_message,
     run_agy_command,
 )
 
@@ -163,6 +167,7 @@ def _run_agy_print(
     extra_env: dict[str, str] | None,
 ) -> dict[str, Any]:
     try:
+        log_file = Path(tempfile.gettempdir()) / f"agymcp-{uuid.uuid4().hex}.log"
         args = build_agy_print_args(
             prompt,
             sandbox=sandbox,
@@ -173,6 +178,7 @@ def _run_agy_print(
             skip_permissions=skip_permissions,
             print_timeout_seconds=print_timeout_seconds,
             base_dir=cd,
+            log_file=log_file,
         )
         result = run_agy_command(
             args,
@@ -181,14 +187,27 @@ def _run_agy_print(
             max_output_chars=max_output_chars,
             extra_env=extra_env,
         )
-        detected_session_id = session_id or find_conversation_id(f"{result.stdout}\n{result.stderr}") or ""
-        return _process_result_payload(result, session_id=detected_session_id)
+        detected_session_id = (
+            session_id
+            or find_conversation_id(f"{result.stdout}\n{result.stderr}")
+            or find_conversation_id_from_file(log_file)
+            or ""
+        )
+        recovered_message = ""
+        if result.success and not result.stdout.strip():
+            recovered_session_id, recovered_message = recover_latest_agent_message(
+                cwd=cd,
+                session_id=detected_session_id,
+                max_output_chars=max_output_chars,
+            )
+            detected_session_id = detected_session_id or recovered_session_id
+        return _process_result_payload(result, session_id=detected_session_id, recovered_message=recovered_message)
     except AgyMcpError as error:
         return {"success": False, "error": redact_text(str(error))}
 
 
-def _process_result_payload(result: Any, *, session_id: str) -> dict[str, Any]:
-    stdout = result.stdout.strip()
+def _process_result_payload(result: Any, *, session_id: str, recovered_message: str = "") -> dict[str, Any]:
+    stdout = result.stdout.strip() or recovered_message.strip()
     stderr = result.stderr.strip()
     payload: dict[str, Any] = {
         "success": result.success,
@@ -201,6 +220,8 @@ def _process_result_payload(result: Any, *, session_id: str) -> dict[str, Any]:
         "command": result.command,
         "cwd": result.cwd,
     }
+    if recovered_message:
+        payload["message_source"] = "transcript"
     if stderr:
         payload["stderr"] = stderr
     if not result.success:

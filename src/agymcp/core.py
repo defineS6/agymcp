@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -27,6 +28,8 @@ _SECRET_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
 _CONVERSATION_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\b(?:conversation|session)[\s_-]*(?:id)?\s*[:=]\s*([A-Za-z0-9._:-]{8,})\b", re.IGNORECASE),
     re.compile(r"\b(?:conversation|session)\s+([A-Za-z0-9._:-]{8,})\b", re.IGNORECASE),
+    re.compile(r"\bCreated conversation\s+([A-Za-z0-9._:-]{8,})\b", re.IGNORECASE),
+    re.compile(r"\bPrint mode:\s*conversation=([A-Za-z0-9._:-]{8,})\b", re.IGNORECASE),
 )
 
 
@@ -116,6 +119,7 @@ def build_agy_print_args(
     skip_permissions: bool = False,
     print_timeout_seconds: int = DEFAULT_PRINT_TIMEOUT_SECONDS,
     base_dir: str | Path | None = None,
+    log_file: str | Path | None = None,
 ) -> list[str]:
     """构造 agy --print 参数列表。"""
     if not prompt or not prompt.strip():
@@ -133,6 +137,8 @@ def build_agy_print_args(
         args.append("--dangerously-skip-permissions")
     if model:
         args.extend(["--model", model])
+    if log_file:
+        args.extend(["--log-file", str(Path(log_file).expanduser())])
     if session_id:
         args.extend(["--conversation", session_id])
     elif continue_last:
@@ -271,6 +277,51 @@ def find_conversation_id(text: str) -> str | None:
     return None
 
 
+def find_conversation_id_from_file(path: str | Path) -> str:
+    """从 agy 日志文件中提取本次调用创建或使用的会话 ID。"""
+    try:
+        content = Path(path).expanduser().read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    return find_conversation_id(content) or ""
+
+
+def recover_latest_agent_message(
+    *,
+    cwd: str | Path,
+    session_id: str = "",
+    max_output_chars: int = DEFAULT_MAX_OUTPUT_CHARS,
+) -> tuple[str, str]:
+    """从 agy 本地 transcript 兜底读取最近一次模型回复。"""
+    if max_output_chars < 1024:
+        raise AgyValidationError("max_output_chars 至少为 1024。")
+
+    resolved_cwd = ensure_directory(cwd, "cwd")
+    conversation_id = session_id or _find_latest_conversation_id(resolved_cwd)
+    if not conversation_id:
+        return "", ""
+
+    transcript_path = _agy_app_data_dir() / "brain" / conversation_id / ".system_generated" / "logs" / "transcript.jsonl"
+    if not transcript_path.is_file():
+        return conversation_id, ""
+
+    latest_content = ""
+    try:
+        with transcript_path.open("r", encoding="utf-8", errors="replace") as transcript:
+            for line in transcript:
+                item = _parse_json_line(line)
+                if not item:
+                    continue
+                if item.get("source") == "MODEL" and item.get("status") == "DONE":
+                    content = item.get("content")
+                    if isinstance(content, str) and content.strip():
+                        latest_content = content.strip()
+    except OSError:
+        return conversation_id, ""
+
+    return conversation_id, redact_text(latest_content[:max_output_chars])
+
+
 def build_doctor_report(
     *,
     cwd: str | Path | None = None,
@@ -362,6 +413,46 @@ def _validate_extra_env(extra_env: Mapping[str, str]) -> dict[str, str]:
             raise AgyValidationError(f"环境变量名不合法：{key}")
         validated[key] = str(value)
     return validated
+
+
+def _agy_app_data_dir() -> Path:
+    app_data_dir = os.environ.get("AGY_APP_DATA_DIR")
+    if app_data_dir:
+        return Path(app_data_dir).expanduser()
+    return Path.home() / ".gemini" / "antigravity-cli"
+
+
+def _find_latest_conversation_id(cwd: Path) -> str:
+    cache_path = _agy_app_data_dir() / "cache" / "last_conversations.json"
+    if not cache_path.is_file():
+        return ""
+
+    try:
+        data = json.loads(cache_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    if not isinstance(data, dict):
+        return ""
+
+    cwd_key = os.path.normcase(str(cwd))
+    for raw_path, conversation_id in data.items():
+        if not isinstance(raw_path, str) or not isinstance(conversation_id, str):
+            continue
+        try:
+            candidate = os.path.normcase(str(Path(raw_path).expanduser().resolve()))
+        except OSError:
+            candidate = os.path.normcase(raw_path)
+        if candidate == cwd_key:
+            return conversation_id
+    return ""
+
+
+def _parse_json_line(line: str) -> dict[str, object] | None:
+    try:
+        item = json.loads(line)
+    except json.JSONDecodeError:
+        return None
+    return item if isinstance(item, dict) else None
 
 
 def _read_stream(stream: object, chunks: list[str], state: dict[str, int | bool], limit: int) -> None:

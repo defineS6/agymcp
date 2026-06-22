@@ -70,6 +70,22 @@ args = ["--from", "git+https://github.com/defineS6/agymcp.git", "agymcp"]
 
 如果已通过 `uv tool install git+https://github.com/defineS6/agymcp.git` 安装，也可以把命令简化为 `agymcp`。
 
+如果本机访问 Google/Antigravity 需要代理，请把代理变量写进 MCP 配置，让 `agy` 子进程继承：
+
+```json
+{
+  "command": "agymcp",
+  "args": [],
+  "type": "stdio",
+  "startup_timeout_sec": 300,
+  "env": {
+    "HTTP_PROXY": "http://127.0.0.1:7890",
+    "HTTPS_PROXY": "http://127.0.0.1:7890",
+    "NO_PROXY": "localhost,127.0.0.1"
+  }
+}
+```
+
 ## MCP 工具
 
 | 工具 | 用途 |

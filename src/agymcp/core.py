@@ -32,6 +32,13 @@ _CONVERSATION_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bPrint mode:\s*conversation=([A-Za-z0-9._:-]{8,})\b", re.IGNORECASE),
 )
 
+_AUTH_FAILURE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"keyringAuth:\s*timed out", re.IGNORECASE),
+    re.compile(r"silent auth failed", re.IGNORECASE),
+    re.compile(r"auth timed out", re.IGNORECASE),
+    re.compile(r"You are not logged into Antigravity", re.IGNORECASE),
+)
+
 
 class AgyMcpError(Exception):
     """agymcp 可预期错误基类。"""
@@ -162,6 +169,7 @@ def run_agy_command(
 ) -> ProcessResult:
     """执行 agy 命令并返回有界输出。"""
     agy_binary = resolve_agy_binary(binary)
+    _prewarm_windows_credential_manager()
     command = [agy_binary, *args]
     return run_process(
         command,
@@ -284,6 +292,21 @@ def find_conversation_id_from_file(path: str | Path) -> str:
     except OSError:
         return ""
     return find_conversation_id(content) or ""
+
+
+def find_auth_failure_from_file(path: str | Path) -> str:
+    """从 agy 日志文件中识别认证失败，避免把空输出误判为成功。"""
+    try:
+        content = Path(path).expanduser().read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    if re.search(r"Print mode:\s*silent auth succeeded|Created conversation", content, re.IGNORECASE):
+        return ""
+    if not any(pattern.search(content) for pattern in _AUTH_FAILURE_PATTERNS):
+        return ""
+    if re.search(r"auth timed out|silent auth failed|keyringAuth:\s*timed out", content, re.IGNORECASE):
+        return "agy 读取系统登录凭据超时并触发 OAuth，未完成本次调用。请先在独立终端运行一次 agy 完成/预热登录后重试。"
+    return "agy 未获得可用的 Antigravity 登录态，请先完成 agy 登录后重试。"
 
 
 def recover_latest_agent_message(
@@ -413,6 +436,26 @@ def _validate_extra_env(extra_env: Mapping[str, str]) -> dict[str, str]:
             raise AgyValidationError(f"环境变量名不合法：{key}")
         validated[key] = str(value)
     return validated
+
+
+def _prewarm_windows_credential_manager() -> None:
+    """预热 Windows 凭据管理器，降低 agy keyring 读取超时概率。"""
+    if os.name != "nt":
+        return
+    if os.environ.get("AGYMCP_SKIP_KEYRING_PREWARM"):
+        return
+    try:
+        subprocess.run(
+            ["cmdkey", "/list"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=3,
+            check=False,
+            shell=False,
+        )
+    except Exception:
+        return
 
 
 def _agy_app_data_dir() -> Path:

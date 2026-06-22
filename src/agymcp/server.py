@@ -17,6 +17,7 @@ from agymcp.core import (
     AgyMcpError,
     build_agy_print_args,
     build_doctor_report,
+    find_auth_failure_from_file,
     find_conversation_id,
     find_conversation_id_from_file,
     redact_text,
@@ -194,14 +195,21 @@ def _run_agy_print(
             or ""
         )
         recovered_message = ""
+        auth_error = ""
         if result.success and not result.stdout.strip():
+            auth_error = find_auth_failure_from_file(log_file)
+        if result.success and not result.stdout.strip() and detected_session_id and not auth_error:
             recovered_session_id, recovered_message = recover_latest_agent_message(
                 cwd=cd,
                 session_id=detected_session_id,
                 max_output_chars=max_output_chars,
             )
             detected_session_id = detected_session_id or recovered_session_id
-        return _process_result_payload(result, session_id=detected_session_id, recovered_message=recovered_message)
+        payload = _process_result_payload(result, session_id=detected_session_id, recovered_message=recovered_message)
+        if auth_error:
+            payload["success"] = False
+            payload["error"] = auth_error
+        return payload
     except AgyMcpError as error:
         return {"success": False, "error": redact_text(str(error))}
 

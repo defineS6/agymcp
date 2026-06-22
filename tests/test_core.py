@@ -10,8 +10,10 @@ from agymcp.core import (
     AgyValidationError,
     build_agy_print_args,
     build_command_preview,
+    find_auth_failure_from_file,
     find_conversation_id,
     find_conversation_id_from_file,
+    run_agy_command,
     recover_latest_agent_message,
     redact_text,
     run_process,
@@ -84,6 +86,31 @@ def test_find_conversation_id_from_file(tmp_path: Path) -> None:
     assert find_conversation_id_from_file(log_file) == "abcdef12-3456"
 
 
+def test_find_auth_failure_from_file_detects_keyring_timeout(tmp_path: Path) -> None:
+    log_file = tmp_path / "agy.log"
+    log_file.write_text(
+        "W keyring.go:92] keyringAuth: timed out after 5s, skipping keyring auth\n"
+        "I printmode.go:196] Print mode: silent auth failed, triggering OAuth\n"
+        "E printmode.go:244] Print mode: auth timed out",
+        encoding="utf-8",
+    )
+
+    assert "读取系统登录凭据超时" in find_auth_failure_from_file(log_file)
+
+
+def test_find_auth_failure_from_file_ignores_early_auth_noise_after_success(tmp_path: Path) -> None:
+    log_file = tmp_path / "agy.log"
+    log_file.write_text(
+        "E log.go:398] error getting token source: You are not logged into Antigravity.\n"
+        "I auth.go:132] ChainedAuth: authenticated via keyring (effective: keyring)\n"
+        "I printmode.go:192] Print mode: silent auth succeeded\n"
+        "I server.go:789] Created conversation abcdef12-3456",
+        encoding="utf-8",
+    )
+
+    assert find_auth_failure_from_file(log_file) == ""
+
+
 def test_redact_text_masks_common_sensitive_values() -> None:
     text = "Bearer abc.def.ghi eyJabc.def.ghi AKIA1234567890ABCDEF"
     redacted = redact_text(text)
@@ -103,6 +130,13 @@ def test_run_process_success() -> None:
 
     assert result.success
     assert result.stdout.strip() == "ok"
+
+
+def test_run_agy_command_honors_skip_keyring_prewarm(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AGYMCP_SKIP_KEYRING_PREWARM", "1")
+
+    with pytest.raises(AgyValidationError):
+        run_agy_command([], cwd=Path.cwd(), timeout_seconds=0)
 
 
 def test_recover_latest_agent_message_from_transcript(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

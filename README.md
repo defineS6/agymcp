@@ -15,6 +15,32 @@
 - `AGY_PATH`：`agy` 可执行文件路径或命令名
 - `AGY_CMD`：兼容其它桥接项目的可执行文件变量，优先级低于 `AGY_PATH`
 
+## 快速安装
+
+### Windows PowerShell
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+uv tool install git+https://github.com/defineS6/agymcp.git
+agy-doctor --skip-models
+claude mcp add agy -s user --transport stdio -- agymcp
+```
+
+### Linux / macOS
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv tool install git+https://github.com/defineS6/agymcp.git
+agy-doctor --skip-models
+claude mcp add agy -s user --transport stdio -- agymcp
+```
+
+如果不想安装到 `uv tool`，也可以让 MCP 客户端每次通过 `uvx` 从 GitHub 启动：
+
+```bash
+claude mcp add agy -s user --transport stdio -- uvx --from git+https://github.com/defineS6/agymcp.git agymcp
+```
+
 ## 本地开发
 
 ```powershell
@@ -31,7 +57,7 @@ uv run agymcp
 Claude Code 示例：
 
 ```bash
-claude mcp add agy -s user --transport stdio -- uvx --from /path/to/agy-mcp agymcp
+claude mcp add agy -s user --transport stdio -- uvx --from git+https://github.com/defineS6/agymcp.git agymcp
 ```
 
 Codex CLI 示例：
@@ -39,10 +65,10 @@ Codex CLI 示例：
 ```toml
 [mcp_servers.agy]
 command = "uvx"
-args = ["--from", "/path/to/agy-mcp", "agymcp"]
+args = ["--from", "git+https://github.com/defineS6/agymcp.git", "agymcp"]
 ```
 
-如果已通过 `uv tool install /path/to/agy-mcp` 安装，也可以把命令简化为 `agymcp`。
+如果已通过 `uv tool install git+https://github.com/defineS6/agymcp.git` 安装，也可以把命令简化为 `agymcp`。
 
 ## MCP 工具
 

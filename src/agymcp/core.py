@@ -17,6 +17,7 @@ from typing import Mapping, Sequence
 DEFAULT_TIMEOUT_SECONDS = 300
 DEFAULT_PRINT_TIMEOUT_SECONDS = 300
 DEFAULT_MAX_OUTPUT_CHARS = 200_000
+DEFAULT_MODEL = "Gemini 3.1 Pro (High)"
 
 _SECRET_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"Bearer\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE), "Bearer <redacted>"),
@@ -121,7 +122,7 @@ def build_agy_print_args(
     sandbox: bool = False,
     session_id: str = "",
     continue_last: bool = False,
-    model: str = "",
+    model: str = DEFAULT_MODEL,
     add_dirs: Sequence[str | Path] | None = None,
     skip_permissions: bool = False,
     print_timeout_seconds: int = DEFAULT_PRINT_TIMEOUT_SECONDS,

@@ -12,6 +12,7 @@ from pydantic import Field
 
 from agymcp.core import (
     DEFAULT_MAX_OUTPUT_CHARS,
+    DEFAULT_MODEL,
     DEFAULT_PRINT_TIMEOUT_SECONDS,
     DEFAULT_TIMEOUT_SECONDS,
     AgyMcpError,
@@ -53,7 +54,7 @@ async def agy(
     sandbox: Annotated[bool, Field(description="追加 `--sandbox`。")] = False,
     SESSION_ID: Annotated[str, "通过 `--conversation` 续接指定 agy 会话。"] = "",
     continue_last: Annotated[bool, Field(description="通过 `--continue` 续接最近会话。")] = False,
-    model: Annotated[str, "通过 `--model` 指定模型。"] = "",
+    model: Annotated[str, "通过 `--model` 指定模型。"] = DEFAULT_MODEL,
     add_dirs: Annotated[list[Path] | None, "通过 `--add-dir` 追加到 agy workspace 的目录。"] = None,
     skip_permissions: Annotated[
         bool,
@@ -90,7 +91,7 @@ async def agy_continue(
     cd: Annotated[Path, "agy 的工作目录。"],
     SESSION_ID: Annotated[str, "通过 `--conversation` 续接指定 agy 会话；为空则使用 `--continue`。"] = "",
     sandbox: Annotated[bool, Field(description="追加 `--sandbox`。")] = False,
-    model: Annotated[str, "通过 `--model` 指定模型。"] = "",
+    model: Annotated[str, "通过 `--model` 指定模型。"] = DEFAULT_MODEL,
     timeout_seconds: Annotated[int, Field(ge=1, le=7200)] = DEFAULT_TIMEOUT_SECONDS,
     print_timeout_seconds: Annotated[int, Field(ge=1, le=7200)] = DEFAULT_PRINT_TIMEOUT_SECONDS,
     max_output_chars: Annotated[int, Field(ge=1024, le=2_000_000)] = DEFAULT_MAX_OUTPUT_CHARS,

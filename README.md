@@ -104,7 +104,7 @@ args = ["--from", "git+https://github.com/defineS6/agymcp.git", "agymcp"]
 - `sandbox`：追加 `--sandbox`
 - `SESSION_ID`：追加 `--conversation <id>` 续接指定会话
 - `continue_last`：追加 `--continue` 续接最近会话，不能与 `SESSION_ID` 同时使用
-- `model`：追加 `--model <name>`
+- `model`：追加 `--model <name>`，默认使用 `Gemini 3.1 Pro (High)`
 - `add_dirs`：重复追加 `--add-dir <path>`
 - `skip_permissions`：追加 `--dangerously-skip-permissions`
 - `timeout_seconds`：本包装器等待进程完成的超时时间

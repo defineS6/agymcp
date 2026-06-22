@@ -8,6 +8,7 @@ import pytest
 
 from agymcp.core import (
     AgyValidationError,
+    DEFAULT_MODEL,
     build_agy_print_args,
     build_command_preview,
     find_auth_failure_from_file,
@@ -58,7 +59,16 @@ def test_build_agy_print_args_resolves_add_dirs_from_base_dir(tmp_path: Path) ->
 
     args = build_agy_print_args("hello", add_dirs=[Path("extra")], base_dir=tmp_path)
 
-    assert args[-3:] == [str(extra.resolve()), "--print", "hello"]
+    assert args == [
+        "--print-timeout",
+        "300s",
+        "--model",
+        DEFAULT_MODEL,
+        "--add-dir",
+        str(extra.resolve()),
+        "--print",
+        "hello",
+    ]
 
 
 def test_build_agy_print_args_accepts_log_file(tmp_path: Path) -> None:
@@ -66,7 +76,7 @@ def test_build_agy_print_args_accepts_log_file(tmp_path: Path) -> None:
 
     args = build_agy_print_args("hello", log_file=log_file)
 
-    assert args == ["--print-timeout", "300s", "--log-file", str(log_file), "--print", "hello"]
+    assert args == ["--print-timeout", "300s", "--model", DEFAULT_MODEL, "--log-file", str(log_file), "--print", "hello"]
 
 
 def test_command_preview_hides_prompt() -> None:

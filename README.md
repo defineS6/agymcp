@@ -121,3 +121,7 @@ args = ["--from", "git+https://github.com/defineS6/agymcp.git", "agymcp"]
 - 返回内容会对 Home 路径、Bearer/JWT/PEM/AKIA 等常见敏感片段做脱敏。
 - `--dangerously-skip-permissions` 只有调用方显式传入 `skip_permissions=true` 才会启用。
 - `SESSION_ID` 只能续接 `agy` 自己的会话，不能继承 MCP 客户端上下文。
+
+## 致谢
+- [SGuDaStudio/geminimcp](https://github.com/GuDaStudio/geminimcp/)
+- [linux.do](https://linux.do) 社区
